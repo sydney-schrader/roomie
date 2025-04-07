@@ -19,10 +19,3 @@ struct CalendarView: View {
         Text("Calendar Screen Content")
     }
 }
-
-
-
-
-#Preview {
-    TabBarView()
-}

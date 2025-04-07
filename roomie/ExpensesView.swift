@@ -5,20 +5,34 @@
 //  Created by Sydney Schrader on 4/6/25.
 //
 import SwiftUI
+import FirebaseAuth
 
-struct Expense: Codable, Identifiable {
+struct Expense: Identifiable, Codable {
     var id = UUID()
     let cost: Double
     let title: String
     let paidBy: String
+    
+    func toDictionary() -> [String: Any] {
+        return [
+            "id": id,
+            "cost": cost,
+            "title": title,
+            "paidBy" : paidBy
+        ]
+    }
 }
 
 struct ExpensesView: View {
+    @State private var showAddExpensePage = false
+    @State private var showExpenseDetailPage = false
     @State private var expenses: [Expense] = [
         Expense(cost: 10, title: "cabo", paidBy: "jac"),
         Expense(cost: 650, title: "rent", paidBy: "ava"),
         Expense(cost: 30, title: "matts", paidBy: "syd")
     ]
+    @StateObject private var roommateManager = RoommateManager()
+    @State private var selectedRoommateId: String = ""
     
     var body: some View {
         NavigationStack {
@@ -63,10 +77,19 @@ struct ExpensesView: View {
             .navigationTitle("expenses")
             .toolbar{
                 Button{
-                    //action
+                    if let currentUserId = Auth.auth().currentUser?.uid,
+                       roommateManager.roommates.contains(where: { $0.id == currentUserId }) {
+                        selectedRoommateId = currentUserId
+                    } else if !roommateManager.roommates.isEmpty {
+                        selectedRoommateId = roommateManager.roommates[0].id
+                    }
+                    showAddExpensePage = true
                 }label: {
                     Image(systemName: "plus")
                 }
+            }
+            .sheet(isPresented: $showAddExpensePage){
+                AddExpenseView(selectedRoommate: selectedRoommateId)
             }
         }
     }
