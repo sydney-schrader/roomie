@@ -1,36 +1,33 @@
 //
-//  AddExpenseView.swift
+//  AddChoreView.swift
 //  roomie
 //
-//  Created by Sydney Schrader on 4/7/25.
+//  Created by Sydney Schrader on 4/8/25.
 //
 
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
 
-struct AddExpenseView: View {
+struct AddChoreView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var roommateManager = RoommateManager()
     @State private var title: String = ""
-    @State private var amount: String = ""
-    @State private var paidBy: String = ""
+    @State private var assignedTo: String = ""
+    @State private var isDone: Bool = false
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     
-    let onSave: (Expense) -> Void
+    let onSave: (Chore) -> Void
     
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("expense details")) {
+                Section(header: Text("chore details")) {
                     TextField("title", text: $title)
-                    
-                    TextField("amount", text: $amount)
-                        .keyboardType(.decimalPad)
                 }
                 
-                Section(header: Text("paid by")) {
+                Section(header: Text("assigned to")) {
                     if isLoading {
                         HStack {
                             Text("loading roommates...")
@@ -41,10 +38,10 @@ struct AddExpenseView: View {
                         Text("no roommates found")
                     } else {
                         // Text field as fallback if picker doesn't work
-                        if paidBy.isEmpty {
-                            TextField("enter name", text: $paidBy)
+                        if assignedTo.isEmpty {
+                            TextField("enter name", text: $assignedTo)
                         } else {
-                            Picker("paid by", selection: $paidBy) {
+                            Picker("assigned to", selection: $assignedTo) {
                                 ForEach(roommateManager.roommates) { roommate in
                                     Text(roommate.firstName).tag(roommate.firstName)
                                 }
@@ -61,7 +58,7 @@ struct AddExpenseView: View {
                     }
                 }
             }
-            .navigationTitle("new expense")
+            .navigationTitle("new chore")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -103,11 +100,11 @@ struct AddExpenseView: View {
             if let currentUser = Auth.auth().currentUser,
                let displayName = currentUser.displayName,
                !displayName.isEmpty {
-                self.paidBy = displayName
-                print("Setting default paid by to current user: \(displayName)")
+                self.assignedTo = displayName
+                print("Setting default assigned to to current user: \(displayName)")
             } else if !roommateManager.roommates.isEmpty {
-                self.paidBy = roommateManager.roommates[0].firstName
-                print("Setting default paid by to first roommate: \(roommateManager.roommates[0].firstName)")
+                self.assignedTo = roommateManager.roommates[0].firstName
+                print("Setting default assigned to first roommate: \(roommateManager.roommates[0].firstName)")
             }
             
             isLoading = false
@@ -121,26 +118,22 @@ struct AddExpenseView: View {
             return
         }
         
-        guard !amount.isEmpty, let cost = Double(amount) else {
-            errorMessage = "please enter a valid amount"
-            return
-        }
         
-        guard !paidBy.isEmpty else {
-            errorMessage = "please enter who paid"
+        guard !assignedTo.isEmpty else {
+            errorMessage = "please enter assignment"
             return
         }
         
         // Create expense object
-        let newExpense = Expense(
+        let newChore = Chore(
             id: UUID().uuidString,
             title: title,
-            cost: cost,
-            paidBy: paidBy
+            assignedTo: assignedTo,
+            isDone: false
         )
         
         // Call save callback
-        onSave(newExpense)
+        onSave(newChore)
         dismiss()
     }
 }

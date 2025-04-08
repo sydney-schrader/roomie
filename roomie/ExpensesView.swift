@@ -21,7 +21,7 @@ struct Expense: Codable, Identifiable {
 //    let notes: String?
     
     func toDictionary() -> [String: Any] {
-        var dict: [String: Any] = [
+        let dict: [String: Any] = [
             "title": title,
             "cost": cost,
             "paidBy": paidBy
@@ -131,7 +131,9 @@ struct ExpensesView: View {
     @StateObject private var expenseManager = ExpenseManager()
     @StateObject private var roommateManager = RoommateManager()
     @State private var showingAddExpense = false
+    @State private var showingExpenseDetail = false
     @State private var isLoading = true
+    @State private var selectedExpense: Expense? = nil
     
     var body: some View {
         NavigationStack {
@@ -142,11 +144,11 @@ struct ExpensesView: View {
                         .padding()
                 } else if expenseManager.expenses.isEmpty {
                     VStack {
-                        Text("No expenses yet")
+                        Text("no expenses yet")
                             .font(.headline)
                             .padding()
                         
-                        Text("Add your first expense by tapping the + button")
+                        Text("add your first expense by tapping the + button")
                             .font(.subheadline)
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
@@ -155,7 +157,7 @@ struct ExpensesView: View {
                         Button(action: {
                             showingAddExpense = true
                         }) {
-                            Text("Add Expense")
+                            Text("add expense")
                                 .padding()
                                 .frame(width: 200)
                                 .background(Color(red: 0.6, green: 0.6, blue: 1.0))
@@ -198,6 +200,10 @@ struct ExpensesView: View {
                                     Rectangle()
                                         .stroke(Color.black, lineWidth: 2)
                                 )
+                                .onTapGesture {
+                                    selectedExpense = expense
+                                    showingExpenseDetail = true
+                                }
                         }
                         .onDelete { indexSet in
                             deleteExpenses(at: indexSet)
@@ -219,6 +225,13 @@ struct ExpensesView: View {
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView() { newExpense in
                     addExpense(newExpense)
+                }
+            }
+            .sheet(isPresented: $showingExpenseDetail, onDismiss: {
+                selectedExpense = nil
+            }) {
+                if let expense = selectedExpense {
+                    ExpenseDetailView(expense: expense)
                 }
             }
             .onAppear {
