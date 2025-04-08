@@ -156,7 +156,10 @@ struct RentDetailView: View {
                         dueTime: dueTime
                         )
                     let roommateManager = RoommateManager()
-                    roommateManager.saveRentInfo(userId: currentUser?.uid ?? "", rentInfo: rentInfo) { success, errorMessage in
+                    guard let householdId = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+                        return
+                    }
+                    roommateManager.addRentInfo(userId: currentUser?.uid ?? "", rentInfo: rentInfo) { success, errorMessage in
                         if success {
                             DispatchQueue.main.async {
                                 onSave?(amountValue)

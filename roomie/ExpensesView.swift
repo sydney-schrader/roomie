@@ -4,97 +4,290 @@
 //
 //  Created by Sydney Schrader on 4/6/25.
 //
-import SwiftUI
+
+// ExpenseManager.swift
+import Foundation
+import FirebaseFirestore
 import FirebaseAuth
 
-struct Expense: Identifiable, Codable {
-    var id = UUID()
-    let cost: Double
+struct Expense: Codable, Identifiable {
+    var id: String
     let title: String
+    let cost: Double
     let paidBy: String
+//    let paidByName: String
+//    let date: Date
+//    let splitWith: [String] // User IDs of people who should split this expense
+//    let notes: String?
     
     func toDictionary() -> [String: Any] {
-        return [
-            "id": id,
-            "cost": cost,
+        var dict: [String: Any] = [
             "title": title,
-            "paidBy" : paidBy
+            "cost": cost,
+            "paidBy": paidBy
+//            "paidByName": paidByName,
+//            "date": date,
+//            "splitWith": splitWith
         ]
+        
+//        if let notes = notes {
+//            dict["notes"] = notes
+//        }
+        
+        return dict
+    }
+    
+    static func fromDictionary(id: String, data: [String: Any]) -> Expense? {
+        guard let title = data["title"] as? String,
+              let cost = data["cost"] as? Double,
+              let paidBy = data["paidBy"] as? String
+//              let paidByName = data["paidByName"] as? String,
+//              let dateTimestamp = data["date"] as? Timestamp,
+//              let splitWith = data["splitWith"] as? [String]
+        else {
+            return nil
+        }
+        
+//        let date = dateTimestamp.dateValue()
+//        let notes = data["notes"] as? String
+        
+        return Expense(
+            id: id,
+            title: title,
+            cost: cost,
+            paidBy: paidBy
+//            paidByName: paidByName,
+//            date: date,
+//            splitWith: splitWith,
+//            notes: notes
+        )
     }
 }
 
+class ExpenseManager: ObservableObject {
+    @Published var expenses: [Expense] = []
+    private let db = Firestore.firestore()
+    
+    // Fetch expenses for the current household
+    func fetchExpenses(for householdId: String) {
+        db.collection("households").document(householdId).collection("expenses")
+            //.order(by: "date", descending: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("Error fetching expenses: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("No expense documents found")
+                    return
+                }
+                
+                let fetchedExpenses = documents.compactMap { document -> Expense? in
+                    return Expense.fromDictionary(id: document.documentID, data: document.data())
+                }
+                
+                DispatchQueue.main.async {
+                    self.expenses = fetchedExpenses
+                }
+            }
+    }
+    
+    // Add a new expense
+    func addExpense(householdId: String, expense: Expense, completion: @escaping (Bool, String?) -> Void) {
+        let expenseData = expense.toDictionary()
+        
+        db.collection("households").document(householdId).collection("expenses")
+            .document(expense.id).setData(expenseData) { error in
+                if let error = error {
+                    completion(false, "Error adding expense: \(error.localizedDescription)")
+                    return
+                }
+                completion(true, nil)
+            }
+    }
+    
+    // Delete an expense
+    func deleteExpense(householdId: String, expenseId: String, completion: @escaping (Bool, String?) -> Void) {
+        db.collection("households").document(householdId).collection("expenses")
+            .document(expenseId).delete() { error in
+                if let error = error {
+                    completion(false, "Error deleting expense: \(error.localizedDescription)")
+                    return
+                }
+                completion(true, nil)
+            }
+    }
+}
+
+// ExpensesView.swift
+import SwiftUI
+import FirebaseAuth
+import FirebaseFirestore
+
 struct ExpensesView: View {
-    @State private var showAddExpensePage = false
-    @State private var showExpenseDetailPage = false
-    @State private var expenses: [Expense] = [
-        Expense(cost: 10, title: "cabo", paidBy: "jac"),
-        Expense(cost: 650, title: "rent", paidBy: "ava"),
-        Expense(cost: 30, title: "matts", paidBy: "syd")
-    ]
+    @StateObject private var expenseManager = ExpenseManager()
     @StateObject private var roommateManager = RoommateManager()
-    @State private var selectedRoommateId: String = ""
+    @State private var showingAddExpense = false
+    @State private var isLoading = true
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                HStack {
-                    Text("title")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-        
-                    Text("amount")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    
-                    Text("paid by")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                
-                List(expenses) { expense in
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .padding()
+                } else if expenseManager.expenses.isEmpty {
+                    VStack {
+                        Text("No expenses yet")
+                            .font(.headline)
+                            .padding()
+                        
+                        Text("Add your first expense by tapping the + button")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                        
+                        Button(action: {
+                            showingAddExpense = true
+                        }) {
+                            Text("Add Expense")
+                                .padding()
+                                .frame(width: 200)
+                                .background(Color(red: 0.6, green: 0.6, blue: 1.0))
+                                .foregroundStyle(.black)
+                                .cornerRadius(20)
+                                .font(.system(size: 18))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.black, lineWidth: 2)
+                                )
+                        }
+                    }
+                    .padding()
+                } else {
+                    // Header
                     HStack {
-                        Text(expense.title)
+                        Text("title")
+                            .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
-                        Text("$\(String(format: "%.2f", expense.cost))")
+                        Text("amount")
+                            .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .center)
                         
-                        Text(expense.paidBy)
+                        Text("paid by")
+                            .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
-                    .listRowInsets(EdgeInsets())
-                    .padding(10)
-                    .background(Color(red: 0.6, green: 0.6, blue: 1.0).opacity(0.7))
-                    .overlay(
-                        Rectangle()
-                            .stroke(Color.black, lineWidth: 2)
-                    )
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    
+                    // List of expenses
+                    List {
+                        ForEach(expenseManager.expenses) { expense in
+                            ExpenseRow(expense: expense)
+                                .listRowInsets(EdgeInsets())
+                                .padding(10)
+                                .background(Color(red: 0.6, green: 0.6, blue: 1.0).opacity(0.7))
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(Color.black, lineWidth: 2)
+                                )
+                        }
+                        .onDelete { indexSet in
+                            deleteExpenses(at: indexSet)
+                        }
+                    }
+                    .listStyle(PlainListStyle())
                 }
-                .listStyle(PlainListStyle())
             }
             .navigationTitle("expenses")
-            .toolbar{
-                Button{
-                    if let currentUserId = Auth.auth().currentUser?.uid,
-                       roommateManager.roommates.contains(where: { $0.id == currentUserId }) {
-                        selectedRoommateId = currentUserId
-                    } else if !roommateManager.roommates.isEmpty {
-                        selectedRoommateId = roommateManager.roommates[0].id
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingAddExpense = true
+                    } label: {
+                        Image(systemName: "plus")
                     }
-                    showAddExpensePage = true
-                }label: {
-                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $showAddExpensePage){
-                AddExpenseView(selectedRoommate: selectedRoommateId)
+            .sheet(isPresented: $showingAddExpense) {
+                AddExpenseView() { newExpense in
+                    addExpense(newExpense)
+                }
             }
+            .onAppear {
+                loadData()
+            }
+        }
+    }
+    
+    private func loadData() {
+        isLoading = true
+        guard let householdId = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+            isLoading = false
+            return
+        }
+        
+        // Fetch household members first
+        roommateManager.fetchRoommates()
+        
+        // Then fetch expenses
+        expenseManager.fetchExpenses(for: householdId)
+        
+        isLoading = false
+    }
+    
+    private func addExpense(_ expense: Expense) {
+        guard let householdId = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+            return
+        }
+        
+        expenseManager.addExpense(householdId: householdId, expense: expense) { success, error in
+            if !success, let error = error {
+                print("Failed to add expense: \(error)")
+            }
+        }
+    }
+    
+    private func deleteExpenses(at offsets: IndexSet) {
+        guard let householdId = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+            return
+        }
+        
+        for index in offsets {
+            let expense = expenseManager.expenses[index]
+            expenseManager.deleteExpense(householdId: householdId, expenseId: expense.id) { _, _ in }
         }
     }
 }
 
-#Preview {
-    ExpensesView()
+struct ExpenseRow: View {
+    let expense: Expense
+    
+    var body: some View {
+        HStack {
+            Text(expense.title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Text("$\(String(format: "%.2f", expense.cost))")
+                .frame(maxWidth: .infinity, alignment: .center)
+            
+            Text(expense.paidBy)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+
+
+struct ExpensesView_Previews: PreviewProvider {
+    static var previews: some View {
+        ExpensesView()
+    }
 }

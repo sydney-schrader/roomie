@@ -71,9 +71,9 @@ struct CreateAccountView: View {
             //on success
             errorMessage = nil
             print("\(firstName)'s account has been created")
-            let newRoommate = Roommate(id: user.uid, firstName: firstName, email: email)
-            let roommateManager = RoommateManager()
-            roommateManager.addRoommate(newRoommate)
+//            let newRoommate = Roommate(userId: user.uid, firstName: firstName, email: email)
+//            let roommateManager = RoommateManager()
+//            roommateManager.addRoommate(newRoommate)
             navigateToSetup = true
             email = ""
             firstName = ""

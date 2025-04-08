@@ -54,8 +54,11 @@ struct SignInView: View {
                     UserDefaults.standard.set(currentHouseholdId, forKey: "currentHouseholdID")
                     
                     let roommateManager = RoommateManager()
+                    guard let householdId = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+                        return
+                    }
                     // Check user settings after setting the household
-                    roommateManager.checkUserSettings { hasRent, hasLaundry, hasChore in
+                    roommateManager.checkUserSettings() { hasRent, hasLaundry, hasChore in
                         DispatchQueue.main.async {
                             // If any setting is missing, go to settings page
                             if !hasRent || !hasLaundry || !hasChore {

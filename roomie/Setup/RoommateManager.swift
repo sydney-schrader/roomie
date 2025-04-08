@@ -58,7 +58,8 @@ struct UserProfile {
     }
 }
 
-struct Roommate{
+struct Roommate: Identifiable{
+    var id = UUID()
     var userId: String
     var firstName: String
     var email: String
@@ -205,84 +206,76 @@ class RoommateManager: ObservableObject {
     @Published var roommates: [Roommate] = []
     private let db = Firestore.firestore()
     
-    func createOrUpdateMember(householdId: String, roommate: Roommate, completion: @escaping (Bool, String?) -> Void) {
-        let roommateData = roommate.toDictionary()
-        
-        db.collection("households").document(householdId).collection("roommates")
-            .document(roommate.userId).setData(roommateData) { error in
-                if let error = error {
-                    completion(false, "Error saving roomie: \(error.localizedDescription)")
-                    return
-                }
-                completion(true, nil)
+    func updateUserSettings(userId: String, userData: [String: Any], completion: @escaping (Bool, String?) -> Void) {
+        db.collection("users").document(userId).updateData(userData) { error in
+            if let error = error {
+                completion(false, "Error updating user settings: \(error.localizedDescription)")
+                return
             }
+            completion(true, nil)
+        }
     }
     
-    func fetchRoommates(householdId: String) {
-        db.collection("households").document(householdId).collection("roommates")
-            .addSnapshotListener { [weak self] querySnapshot, error in
-                guard let self = self else { return }
-                
-                if let error = error {
-                    print("Error getting roommates: \(error.localizedDescription)")
-                    return
-                }
-                
-                guard let documents = querySnapshot?.documents else {
-                    print("No roommate documents found")
-                    return
-                }
-                
-                let updatedRoommates = documents.compactMap { document -> Roommate?
-                    let data = document.data()
-                    
-                    guard let userId = data["userId"] as String,
-                          let firstName = data["firstName"] as String,
-                          let email = data["email"] as String else {
-                        return nil
-                    }
-                    
-                    var choreDay: DayOfWeek? = nil
-                    if let choreDayString = data["choreDay"] as? String {
-                        choreDay = DayOfWeek(rawValue: choreDayString)
-                    }
-                    
-                    var laundryDay: DayOfWeek? = nil
-                    if let laundryDayString = data["laundryDay"] as? String {
-                        laundryDay = DayOfWeek(rawValue: laundryDayString)
-                    }
-                    
-                    var rentInfo: RentInfo? = nil
-                    if let rentData = data["rentInfo"] as? [String: Any],
-                       let amount = rentData["amount"] as? Double,
-                       let dueDayOfMonth = rentData["dueDayOfMonth"] as? Int,
-                       let dueTimeTimestamp = rentData["dueTime"] as? Timestamp,
-                       let hasReminders = rentData["hasReminders"] as? Bool {
-                        
-                        rentInfo = RentInfo(
-                            amount: amount,
-                            hasReminders: hasReminders,
-                            dueDayOfMonth: dueDayOfMonth,
-                            dueTime: dueTimeTimestamp.dateValue()
-                        )
-                    }
-                    
-                    return Roommate(
-                        userId: userId,
-                        firstName: firstName,
-                        email: email,
-                        choreDay: choreDay,
-                        laundryDay: laundryDay,
-                        rentInfo: rentInfo
-                    )
-                        
-                }
-                DispatchQueue.main.async {
-                    self.roommates = updatedRoommates
-                }
-                    
+    func fetchRoommates() {
+        guard let currentHouseholdID = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+            print("No household ID found")
+            return
+        }
+        
+        print("Fetching household data: \(currentHouseholdID)")
+        
+        // First get the roommates array from the household
+        db.collection("households").document(currentHouseholdID).getDocument { [weak self] snapshot, error in
+            guard let self = self, let data = snapshot?.data(), let roommates = data["roommates"] as? [String] else {
+                print("Error loading household roommates: \(error?.localizedDescription ?? "unknown error")")
+                return
             }
+            
+            print("Found \(roommates.count) roommates in household")
+            
+            if roommates.isEmpty {
+                DispatchQueue.main.async {
+                    self.roommates = []
+                }
+                return
+            }
+            
+            // Then fetch each user's data from the users collection
+            let group = DispatchGroup()
+            var fetchedRoommates: [Roommate] = []
+            
+            for userId in roommates {
+                group.enter()
+                self.db.collection("users").document(userId).getDocument { userSnapshot, userError in
+                    defer { group.leave() }
+                    
+                    if let userData = userSnapshot?.data(), let firstName = userData["firstName"] as? String, let email = userData["email"] as? String {
+                        print("Found user: \(firstName)")
+                        
+                        var choreDay: DayOfWeek? = nil
+                        if let choreDayString = userData["choreDay"] as? String {
+                            choreDay = DayOfWeek(rawValue: choreDayString)
+                        }
+                        
+                        var laundryDay: DayOfWeek? = nil
+                        if let laundryDayString = userData["laundryDay"] as? String {
+                            laundryDay = DayOfWeek(rawValue: laundryDayString)
+                        }
+                        
+                        let roommate = Roommate(userId: userId, firstName: firstName, email: email, choreDay: choreDay, laundryDay: laundryDay)
+                        fetchedRoommates.append(roommate)
+                    }
+                }
+            }
+            
+            group.notify(queue: .main) {
+                print("Finished fetching \(fetchedRoommates.count) roommates")
+                self.roommates = fetchedRoommates
+            }
+        }
     }
+    
+
     
 //    func addRoommate(_ roommate: Roommate) {
 //        guard let currentHouseholdID = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
@@ -321,78 +314,66 @@ class RoommateManager: ObservableObject {
 //            }
 //    }
 //    
-    func addRentInfo(householdId: String, userId: String, rentInfo: RentInfo, completion: @escaping (Bool, String?) -> Void) {
-        db.collection("households")
-            .document(householdId)
-            .collection("roommates")
-            .document(userId)
-            .updateData(["rentInfo": rentInfo.toDictionary()]) { error in
-                if let error = error {
-                    print("Error saving rent info: \(error.localizedDescription)")
-                    completion(false, error.localizedDescription)
-                } else {
-                    print("Rent info saved successfully")
-                    completion(true, nil)
-                }
+    func addRentInfo(userId: String, rentInfo: RentInfo, completion: @escaping (Bool, String?) -> Void) {
+        db.collection("users").document(userId).updateData(["rentInfo": rentInfo.toDictionary()]) { error in
+            if let error = error {
+                print("Error saving rent info: \(error.localizedDescription)")
+                completion(false, error.localizedDescription)
+            } else {
+                print("Rent info saved successfully")
+                completion(true, nil)
             }
+        }
     }
     
-    func addLaundryDay(householdId: String, userId: String, laundryDay: DayOfWeek, completion: @escaping (Bool, String?) -> Void) {
-        
-        db.collection("households").document(householdId).collection("roommates")
-            .document(userId)
-            .updateData(["laundryDay": laundryDay.rawValue]) { error in
-                if let error = error {
-                    print("Error updating laundry day: \(error.localizedDescription)")
-                    completion(false, error.localizedDescription)
-                } else {
-                    print("Laundry day updated successfully")
-                    completion(true, nil)
-                }
+    func addLaundryDay(userId: String, laundryDay: DayOfWeek, completion: @escaping (Bool, String?) -> Void) {
+        db.collection("users").document(userId).updateData(["laundryDay": laundryDay.rawValue]) { error in
+            if let error = error {
+                print("Error updating laundry day: \(error.localizedDescription)")
+                completion(false, error.localizedDescription)
+            } else {
+                print("Laundry day updated successfully")
+                completion(true, nil)
             }
+        }
     }
     
-    func addChoreDay(householdId: String,userId: String, choreDay: DayOfWeek, completion: @escaping (Bool, String?) -> Void) {
-        db.collection("households").document(householdId).collection("roommates")
-            .document(userId)
-            .updateData(["choreDay": choreDay.rawValue]) { error in
-                if let error = error {
-                    print("Error updating chore day: \(error.localizedDescription)")
-                    completion(false, error.localizedDescription)
-                } else {
-                    print("chore day updated successfully")
-                    completion(true, nil)
-                }
+    func addChoreDay(userId: String, choreDay: DayOfWeek, completion: @escaping (Bool, String?) -> Void) {
+        db.collection("users").document(userId).updateData(["choreDay": choreDay.rawValue]) { error in
+            if let error = error {
+                print("Error updating chore day: \(error.localizedDescription)")
+                completion(false, error.localizedDescription)
+            } else {
+                print("Chore day updated successfully")
+                completion(true, nil)
             }
+        }
     }
     
-    func checkUserSettings(householdId: String, completion: @escaping (Bool, Bool, Bool) -> Void) {
+    func checkUserSettings(completion: @escaping (Bool, Bool, Bool) -> Void) {
         guard let userId = Auth.auth().currentUser?.uid else {
             completion(false, false, false)
             return
         }
         
-        db.collection("households").document(householdId).collection("roommates")
-            .document(userId).getDocument { document, error in
-                
-                if let error = error {
-                    print("Error getting user settings: \(error.localizedDescription)")
-                    completion(false, false, false)
-                    return
-                }
-                
-                guard let data = document?.data() else {
-                    completion(false, false, false)
-                    return
-                }
-                
-                let hasRentInfo = data["rentInfo"] != nil
-                let hasLaundryDay = data["laundryDay"] != nil
-                let hasChoreDay = data["choreDay"] != nil
-                
-                // Return results via completion handler
-                completion(hasRentInfo, hasLaundryDay, hasChoreDay)
+        db.collection("users").document(userId).getDocument { document, error in
+            if let error = error {
+                print("Error getting user settings: \(error.localizedDescription)")
+                completion(false, false, false)
+                return
             }
+            
+            guard let data = document?.data() else {
+                completion(false, false, false)
+                return
+            }
+            
+            let hasRentInfo = data["rentInfo"] != nil
+            let hasLaundryDay = data["laundryDay"] != nil
+            let hasChoreDay = data["choreDay"] != nil
+            
+            completion(hasRentInfo, hasLaundryDay, hasChoreDay)
+        }
     }
 }
 
@@ -400,7 +381,7 @@ struct Household: Identifiable, Codable {
     var id: String
     var name: String
     var joinCode: String
-    var members: [String]
+    var roommates: [String]
     var essentialsOption: Int // 0=rotate, 1=split, 2=individual
     var hostingOption: Int // 0=all approve all, 1=approve certain, 2=no approval
     
@@ -409,7 +390,7 @@ struct Household: Identifiable, Codable {
             "id": id,
             "name": name,
             "joinCode": joinCode,
-            "members": members,
+            "roommates": roommates,
             "essentialsOption": essentialsOption,
             "hostingOption": hostingOption
         ]
@@ -418,7 +399,7 @@ struct Household: Identifiable, Codable {
     static func fromDictionary(_ dict: [String: Any], id: String) -> Household? {
         guard let name = dict["name"] as? String,
               let joinCode = dict["joinCode"] as? String,
-              let members = dict["members"] as? [String] else {
+              let roommates = dict["roommates"] as? [String] else {
             return nil
         }
         
@@ -429,7 +410,7 @@ struct Household: Identifiable, Codable {
             id: id,
             name: name,
             joinCode: joinCode,
-            members: members,
+            roommates: roommates,
             essentialsOption: essentialsOption,
             hostingOption: hostingOption
         )
@@ -457,39 +438,44 @@ class HouseholdManager: ObservableObject {
             id: householdId,
             name: name,
             joinCode: joinCode,
-            members: [userId],
-            essentialsOption: -1, // Not set yet
-            hostingOption: -1 // Not set yet
+            roommates: [userId],
+            essentialsOption: -1,
+            hostingOption: -1
         )
         
-        db.collection("households").document(householdId).setData(newHousehold.toDictionary()) {
-            [weak self] error in
-            if let error = error {
-                completion(nil, "error creating household: \(error.localizedDescription)")
-                return
-            }
-            let roommateManager = RoommateManager()
-            let roommate = Roommate(
-                userId: userId,
-                firstName: firstName,
-                email: email
-            )
-            
-            roommateManager.createOrUpdateMember(householdId: householdId, roommate: roommate) {
-                success, error in
-                if !success {
-                    completion(nil, error)
-                    return
-                }
-                
-                self?.userManager.addHouseholdToUser(userId: userId, householdId: householdId) {
-                    success, error in
+        // First, ensure user document exists
+        userManager.fetchCurrentUserProfile { profile, error in
+            if profile == nil {
+                // Create user document if it doesn't exist
+                self.userManager.createUserProfile(userId: userId, firstName: firstName, email: email) { success, error in
                     if !success {
                         completion(nil, error)
                         return
                     }
-                    completion(householdId, nil)
+                    // Continue with household creation
+                    self.createHouseholdAndUpdate(userId, householdId, newHousehold, completion)
                 }
+            } else {
+                // User exists, continue with household creation
+                self.createHouseholdAndUpdate(userId, householdId, newHousehold, completion)
+            }
+        }
+    }
+
+    private func createHouseholdAndUpdate(_ userId: String, _ householdId: String, _ household: Household, _ completion: @escaping (String?, String?) -> Void) {
+        db.collection("households").document(householdId).setData(household.toDictionary()) { [weak self] error in
+            if let error = error {
+                completion(nil, "Error creating household: \(error.localizedDescription)")
+                return
+            }
+            
+            // Add household to user
+            self?.userManager.addHouseholdToUser(userId: userId, householdId: householdId) { success, error in
+                if !success {
+                    completion(nil, error)
+                    return
+                }
+                completion(householdId, nil)
             }
         }
     }
@@ -514,11 +500,11 @@ class HouseholdManager: ObservableObject {
             let householdId = documents[0].documentID
             let data = documents[0].data()
             
-            var members = data["members"] as? [String] ?? []
-            if !members.contains(userId) {
-                members.append(userId)
+            var roommates = data["roommates"] as? [String] ?? []
+            if !roommates.contains(userId) {
+                roommates.append(userId)
                 
-                self.db.collection("households").document(householdId).updateData(["members": members]) { error in
+                self.db.collection("households").document(householdId).updateData(["roommates": roommates]) { error in
                     if let error = error {
                         completion(false, "Error joining: \(error.localizedDescription)")
                     } else {

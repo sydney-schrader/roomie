@@ -82,6 +82,9 @@ struct ChoreDetailView: View {
                 Button(action: {
                     // Save action
                     let roommateManager = RoommateManager()
+                    guard let householdId = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+                        return
+                    }
                     roommateManager.addChoreDay(userId: Auth.auth().currentUser?.uid ?? "", choreDay: selectedDay) { success, errorMessage in
                         if success {
                             DispatchQueue.main.async {

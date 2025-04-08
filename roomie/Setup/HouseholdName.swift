@@ -49,14 +49,19 @@ struct HouseholdName: View {
                 )
                 .padding(5)
             Button("set name", action: {
-                let householdId = householdManager.createHousehold(name: householdName.isEmpty ? "Household" : householdName)
-                householdManager.updateHouseholdSettings(
-                    householdId: householdId,
-                    essentialsOption: essentialsOption,
-                    hostingOption: hostingOption
-                )
-                    
-                showHomeView = true
+                householdManager.createHousehold(name: householdName.isEmpty ? "Household" : householdName) { householdId, error in
+                    if let householdId = householdId {
+                        householdManager.updateHouseholdSettings(
+                            householdId: householdId,
+                            essentialsOption: essentialsOption,
+                            hostingOption: hostingOption
+                        )
+                        
+                        showHomeView = true
+                    } else if let error = error {
+                        print("Error creating household: \(error)")
+                    }
+                }
             })
                 .padding()
                 .frame(width: 150)
@@ -69,15 +74,18 @@ struct HouseholdName: View {
                         .stroke(Color.black, lineWidth: 2)
                 )
             Button("skip", action: {
-                let householdId = householdManager.createHousehold(name: "Household")
-                                
-                householdManager.updateHouseholdSettings(
-                    householdId: householdId,
-                    essentialsOption: essentialsOption,
-                    hostingOption: hostingOption
-                )
-                
-                showHomeView = true
+                let householdId: () = householdManager.createHousehold(name: "Household") { householdId, error in
+                    if let householdId = householdId {
+                        householdManager.updateHouseholdSettings(
+                            householdId: householdId,
+                            essentialsOption: essentialsOption,
+                            hostingOption: hostingOption
+                        )
+                        showHomeView = true
+                    } else if let error = error {
+                        print("error creating household: \(error)")
+                    }
+                }
             })
                 .padding()
                 .frame(width: 75, height: 30)
