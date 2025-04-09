@@ -25,6 +25,7 @@ struct AddChoreView: View {
             Form {
                 Section(header: Text("chore details")) {
                     TextField("title", text: $title)
+                        .autocapitalization(.none)
                 }
                 
                 Section(header: Text("assigned to")) {

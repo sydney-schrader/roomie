@@ -29,7 +29,7 @@ struct TabBarView: View {
                 }
                 .tag(1)
             
-            CalendarView()
+            CalendarScene()
                 .tabItem {
                     Label("calendar", systemImage: "calendar")
                 }

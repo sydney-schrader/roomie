@@ -14,8 +14,4 @@ struct HomeView: View {
     }
 }
 
-struct CalendarView: View {
-    var body: some View {
-        Text("Calendar Screen Content")
-    }
-}
+

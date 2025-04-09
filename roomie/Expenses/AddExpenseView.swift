@@ -25,6 +25,7 @@ struct AddExpenseView: View {
             Form {
                 Section(header: Text("expense details")) {
                     TextField("title", text: $title)
+                        .autocapitalization(.none)
                     
                     TextField("amount", text: $amount)
                         .keyboardType(.decimalPad)
