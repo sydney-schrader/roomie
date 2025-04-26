@@ -15,7 +15,10 @@ struct AddExpenseView: View {
     @State private var title: String = ""
     @State private var amount: String = ""
     @State private var paidBy: String = ""
+    @State private var selectedParticipants: Set<String> = []
+    @State private var customAmounts: [String: String] = [:]
     @State private var date: Date = Date()
+    @State private var split: SplitType = .equally
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     
@@ -55,6 +58,47 @@ struct AddExpenseView: View {
                                 }
                             }
                             .pickerStyle(MenuPickerStyle())
+                        }
+                    }
+                    
+                    Picker("split", selection: $split) {
+                        ForEach(SplitType.allCases, id: \.self){ type in
+                            Text(type.rawValue)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                }
+                
+                Section(header: Text("participants")) {
+                    if roommateManager.roommates.isEmpty {
+                        Text("Loading roommates...")
+                    } else {
+                        ForEach(roommateManager.roommates) { roommate in
+                            HStack {
+                                Text(roommate.firstName)
+                                Spacer()
+                                if split == .equally {
+                                    Toggle("", isOn: Binding(
+                                        get: { selectedParticipants.contains(roommate.firstName) },
+                                        set: { isSelected in
+                                            if isSelected {
+                                                selectedParticipants.insert(roommate.firstName)
+                                            } else {
+                                                selectedParticipants.remove(roommate.firstName)
+                                            }
+                                        }
+                                    ))
+                                    .labelsHidden()
+                                } else { // exactly split
+                                    TextField("$0", text: Binding(
+                                        get: { customAmounts[roommate.firstName] ?? "" },
+                                        set: { customAmounts[roommate.firstName] = $0 }
+                                    ))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 80)
+                                }
+                            }
                         }
                     }
                 }
@@ -136,13 +180,42 @@ struct AddExpenseView: View {
             return
         }
         
+        let participants = Array(selectedParticipants)
+        guard !participants.isEmpty else {
+            errorMessage = "Please select at least one participant"
+            return
+        }
+        
+        // For exact split, validate amounts
+        var customAmountsDouble: [String: Double] = [:]
+        if split == .exactly {
+            for (id, amountStr) in customAmounts {
+                if let amount = Double(amountStr) {
+                    customAmountsDouble[id] = amount
+                } else {
+                    customAmountsDouble[id] = 0.0
+                }
+            }
+            
+            let cost = Double(amount)!
+            // Check if sum matches total
+            let sumOfAmounts = customAmountsDouble.values.reduce(0, +)
+            if abs(sumOfAmounts - cost) > 0.01 { // Allow for small floating-point differences
+                errorMessage = "The sum of amounts must equal the total expense"
+                return
+            }
+        }
+        
         // Create expense object
         let newExpense = Expense(
             id: UUID().uuidString,
             title: title,
             cost: cost,
             paidBy: paidBy,
-            date: date
+            date: date,
+            split: split,
+            participants: participants,
+            customAmounts: customAmountsDouble
         )
         
         // Call save callback
