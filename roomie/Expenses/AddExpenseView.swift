@@ -15,6 +15,7 @@ struct AddExpenseView: View {
     @State private var title: String = ""
     @State private var amount: String = ""
     @State private var paidBy: String = ""
+    @State private var date: Date = Date()
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     
@@ -29,6 +30,9 @@ struct AddExpenseView: View {
                     
                     TextField("amount", text: $amount)
                         .keyboardType(.decimalPad)
+                    
+                    DatePicker("date", selection: $date, displayedComponents: [.date])
+                        
                 }
                 
                 Section(header: Text("paid by")) {
@@ -137,7 +141,8 @@ struct AddExpenseView: View {
             id: UUID().uuidString,
             title: title,
             cost: cost,
-            paidBy: paidBy
+            paidBy: paidBy,
+            date: date
         )
         
         // Call save callback

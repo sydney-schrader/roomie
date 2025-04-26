@@ -188,13 +188,25 @@ struct ChoresView: View {
                     addChore(newChore)
                 }
             }
-            .sheet(isPresented: $showingChoreDetail, onDismiss: {
-                selectedChore = nil
-            }) {
-                if let chore = selectedChore {
-                    ChoreSettingsView(chore: chore)
-                }
+            .sheet(item: $selectedChore) { chore in
+                ChoreSettingsView(chore: chore)
             }
+//            .sheet(isPresented: $showingChoreDetail, onDismiss: {
+//                print("Sheet dismissed")
+//                selectedChore = nil
+//            }) {
+//                if let chore = selectedChore {
+//                    ChoreSettingsView(chore: chore)
+//                        .onAppear {
+//                            print("ChoreSettingsView sheet appeared with chore: \(chore.title)")
+//                        }
+//                } else {
+//                    Text("No chore selected")
+//                        .onAppear {
+//                            print("Sheet appeared with no chore selected")
+//                        }
+//                }
+//            }
             .onAppear {
                 loadData()
             }

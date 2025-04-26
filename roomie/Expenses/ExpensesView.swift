@@ -16,7 +16,7 @@ struct Expense: Codable, Identifiable {
     let cost: Double
     let paidBy: String
 //    let paidByName: String
-//    let date: Date
+    let date: Date
 //    let splitWith: [String] // User IDs of people who should split this expense
 //    let notes: String?
     
@@ -24,9 +24,9 @@ struct Expense: Codable, Identifiable {
         let dict: [String: Any] = [
             "title": title,
             "cost": cost,
-            "paidBy": paidBy
+            "paidBy": paidBy,
 //            "paidByName": paidByName,
-//            "date": date,
+            "date": date,
 //            "splitWith": splitWith
         ]
         
@@ -40,24 +40,24 @@ struct Expense: Codable, Identifiable {
     static func fromDictionary(id: String, data: [String: Any]) -> Expense? {
         guard let title = data["title"] as? String,
               let cost = data["cost"] as? Double,
-              let paidBy = data["paidBy"] as? String
+              let paidBy = data["paidBy"] as? String,
 //              let paidByName = data["paidByName"] as? String,
-//              let dateTimestamp = data["date"] as? Timestamp,
+              let dateTimestamp = data["date"] as? Timestamp
 //              let splitWith = data["splitWith"] as? [String]
         else {
             return nil
         }
         
-//        let date = dateTimestamp.dateValue()
+        let date = dateTimestamp.dateValue()
 //        let notes = data["notes"] as? String
         
         return Expense(
             id: id,
             title: title,
             cost: cost,
-            paidBy: paidBy
+            paidBy: paidBy,
 //            paidByName: paidByName,
-//            date: date,
+            date: date,
 //            splitWith: splitWith,
 //            notes: notes
         )
@@ -71,7 +71,7 @@ class ExpenseManager: ObservableObject {
     // Fetch expenses for the current household
     func fetchExpenses(for householdId: String) {
         db.collection("households").document(householdId).collection("expenses")
-            //.order(by: "date", descending: true)
+            .order(by: "date", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self = self else { return }
                 
@@ -134,6 +134,7 @@ struct ExpensesView: View {
     @State private var showingExpenseDetail = false
     @State private var isLoading = true
     @State private var selectedExpense: Expense? = nil
+    @State private var essentialsOption: Int = -1
     
     var body: some View {
         NavigationStack {
@@ -174,6 +175,10 @@ struct ExpensesView: View {
                 } else {
                     // Header
                     HStack {
+                        Text("date")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
                         Text("title")
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,6 +216,52 @@ struct ExpensesView: View {
                     }
                     .listStyle(PlainListStyle())
                 }
+                
+                if essentialsOption == 0 { //0 rotate, 1 split, 2 not at all
+                    Text("essentials rotation")
+                        .font(.title)
+                        .multilineTextAlignment(.leading)
+                    
+                    HStack {
+                        Text("date")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        Text("item")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        Text("bought by")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    
+                    List {
+                        ForEach(expenseManager.expenses) { expense in
+                            ExpenseRow(expense: expense)
+                                .listRowInsets(EdgeInsets())
+                                .padding(10)
+                                .background(Color(red: 0.6, green: 0.6, blue: 1.0).opacity(0.7))
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(Color.black, lineWidth: 2)
+                                )
+                                .onTapGesture {
+                                    selectedExpense = expense
+                                    showingExpenseDetail = true
+                                }
+                        }
+                        .onDelete { indexSet in
+                            deleteExpenses(at: indexSet)
+                        }
+                    }
+                    .listStyle(PlainListStyle())
+                    
+                    Spacer()
+                }
+                
             }
             .navigationTitle("expenses")
             .toolbar {
@@ -227,18 +278,24 @@ struct ExpensesView: View {
                     addExpense(newExpense)
                 }
             }
-            .sheet(isPresented: $showingExpenseDetail, onDismiss: {
-                selectedExpense = nil
-            }) {
-                if let expense = selectedExpense {
-                    ExpenseDetailView(expense: expense)
-                }
+            .sheet(item: $selectedExpense) { expense in
+                ExpenseDetailView(expense: expense)
             }
+//            .sheet(isPresented: $showingExpenseDetail, onDismiss: {
+//                selectedExpense = nil
+//            }) {
+//                if let expense = selectedExpense {
+//                    ExpenseDetailView(expense: expense)
+//                }
+//            }
             .onAppear {
                 loadData()
             }
+            
         }
     }
+    
+    
     
     private func loadData() {
         isLoading = true
@@ -247,13 +304,24 @@ struct ExpensesView: View {
             return
         }
         
-        // Fetch household members first
-        roommateManager.fetchRoommates()
+        // Create a household manager and fetch the current household
+        let householdManager = HouseholdManager()
         
-        // Then fetch expenses
-        expenseManager.fetchExpenses(for: householdId)
-        
-        isLoading = false
+        Task {
+            if let household = await householdManager.fetchCurrentHousehold() {
+                // Update the essentials option
+                DispatchQueue.main.async {
+                    self.essentialsOption = household.essentialsOption
+                }
+            }
+            
+            // Then fetch the roommates and expenses
+            DispatchQueue.main.async {
+                self.roommateManager.fetchRoommates()
+                self.expenseManager.fetchExpenses(for: householdId)
+                self.isLoading = false
+            }
+        }
     }
     
     private func addExpense(_ expense: Expense) {
@@ -285,6 +353,9 @@ struct ExpenseRow: View {
     
     var body: some View {
         HStack {
+            Text(expense.date.formatted(date: .numeric, time: .omitted))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
             Text(expense.title)
                 .frame(maxWidth: .infinity, alignment: .leading)
             

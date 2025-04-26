@@ -59,17 +59,16 @@ struct ExpenseDetailView: View {
                 
                 // We'll add placeholders for future fields that might be added later
                 
-                // Date field (commented out for now)
-                // HStack {
-                //     Text("date")
-                //         .fontWeight(.medium)
-                //
-                //     Spacer()
-                //
-                //     Text(formatDate(expense.date))
-                //         .font(.headline)
-                // }
-                // Divider()
+                 HStack {
+                     Text("date")
+                         .fontWeight(.medium)
+                
+                     Spacer()
+                
+                     Text(expense.date.formatted(date: .numeric, time: .omitted))
+                         .font(.headline)
+                 }
+                 Divider()
                 
                 // Split with (commented out for now)
                 // VStack(alignment: .leading, spacing: 10) {
@@ -148,6 +147,6 @@ struct ExpenseDetailView: View {
     // }
 }
 
-#Preview {
-    ExpenseDetailView(expense: Expense(id: "123", title: "Groceries", cost: 45.50, paidBy: "John"))
-}
+//#Preview {
+//    ExpenseDetailView(expense: Expense(id: "123", title: "Groceries", cost: 45.50, paidBy: "John"))
+//}

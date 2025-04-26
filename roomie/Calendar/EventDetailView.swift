@@ -21,7 +21,7 @@ struct EventDetailView: View {
     
     private var timeDisplay: String {
         if event.isAllDay {
-            return "All day"
+            return "all day"
         } else if let start = event.startTime, let end = event.endTime {
             return "\(start) - \(end)"
         } else if let start = event.startTime {
@@ -67,15 +67,15 @@ struct EventDetailView: View {
                         Text("\(startTime) - \(endTime)")
                             .font(.system(size: 16))
                     } else if event.isAllDay {
-                        Text("All day")
+                        Text("all day")
                             .font(.system(size: 16))
                     }
                     
-                    if let repeats = event.repeats {
-                        Text("repeats \(repeats)")
-                            .font(.system(size: 16))
-                            .foregroundColor(.red)
-                    }
+//                    if let repeats = event.repeats {
+//                        Text("repeats \(repeats)")
+//                            .font(.system(size: 16))
+//                            .foregroundColor(.red)
+//                    }
                 }
                 .padding(.horizontal)
                 
@@ -118,9 +118,8 @@ struct EventDetailView: View {
                 Spacer()
             }
             .padding(.vertical)
-            .background(Color(UIColor.systemBackground))
+            .background(Color(event.color))
         }
-        .background(Color(red: 0.9, green: 1.0, blue: 0.9)) // Light mint background
     }
 }
 

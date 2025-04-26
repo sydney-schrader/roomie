@@ -97,6 +97,9 @@ struct ChoreSettingsView: View {
         }
         .padding()
         .background(Color(.systemBackground))
+        .onAppear() {
+            print("chore settings appeared for  \(chore.title)")
+        }
     }
     
 

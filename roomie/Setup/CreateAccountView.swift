@@ -106,6 +106,7 @@ struct CreateAccountView: View {
                     )
                 TextField("first name", text: $firstName)
                     .autocorrectionDisabled()
+                    .autocapitalization(.none)
                     .padding()
                     .frame(width: 350)
                     .background(Color(red: 0.8, green: 0.8, blue: 1.0))
